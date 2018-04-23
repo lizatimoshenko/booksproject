@@ -6,7 +6,7 @@
 </head>
 <body>
 
- <p>Welcome {{username}}! You are now logged in.</p>
+ <p>Welcome {{username}}!</p>
  <a href="/logout"><button>LOGOUT</button></a>
 
 </body>

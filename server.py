@@ -3,9 +3,9 @@ from bottle import get, post, redirect, request, route, run, static_file, view, 
 from py2neo import Graph, watch, authenticate
 from os.path import dirname, join as path_join
 # from py2neo.neo4j import GraphDatabaseService, CypherQuery
-#from simplecrypt import encrypt, decrypt
 import bcrypt
 from models import User
+
 
 home = dirname(__file__)
 static = path_join(home, "static")
@@ -55,17 +55,17 @@ def get_login_form():
 def get_login():
     username = request.forms.get('name')
     user_password = graph.run("MATCH (user {username:{N}}) RETURN user.password,user.username", {"N": username}).data()
-    password = request.forms.get('password')
-    print(user_password[0]['user.username'])
-    print(bcrypt.hashpw(password.encode('utf-8'), salt))
-    print(user_password[0]['user.password'])
-    print(str(user_password[0]['user.password']))
-    if bcrypt.checkpw(password, str(user_password[0]['user.password'])):
-        response.set_cookie("account", username, secret='some-secret-key')
-        info = {'username': username}
-        return template('profile.tpl', info)
+    if len(user_password) == 0:
+        return "<p>User not found</p>"
     else:
-        return "<p>Login failed.</p>"
+
+        password = request.forms.get('password')
+        if bcrypt.checkpw(password, str(user_password[0]['user.password'])):
+            response.set_cookie("account", username, secret='some-secret-key')
+            info = {'username': username}
+            return template('profile.tpl', info)
+        else:
+            return "<p>Login failed.</p>"
 
 
 @route("/logout")
