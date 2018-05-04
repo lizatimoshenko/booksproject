@@ -36,11 +36,14 @@ def get_form():
 def get_register():
     """"""
     user = User()
-    user.username = request.forms.get('name')
+    username = request.forms.get('name')
     user.email = request.forms.get('email')
-
     hashed = bcrypt.hashpw(request.forms.get('password').encode('utf-8'), salt)
-    print(hashed)
+
+    check_if_user_exist = graph.run("MATCH (user {username:{N}}) RETURN user.username, user.email",
+                                    {"N": username}).data()
+
+    user.username = username
     user.password = hashed
     graph.push(user)
     redirect("/")
@@ -50,6 +53,8 @@ def get_register():
 def get_login_form():
     return static_file("login.html", root="views")
 
+
+# TODO  if username exist show it to user
 
 @route("/login", method="POST")
 def get_login():
@@ -72,6 +77,16 @@ def get_login():
 def log_out():
     response.set_cookie('auto', '')
     redirect('/')
+
+
+# Static CSS Files
+@route('/static/:path#.+#', name='static')
+def static(path):
+    return static_file(path, root='static')
+
+
+def server_static_img(filename):
+    return static_file(filename, root='/static/images')
 
 
 run(host='localhost', port=8080, debug=True)
