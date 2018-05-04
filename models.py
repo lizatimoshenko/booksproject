@@ -13,6 +13,7 @@ class User(GraphObject):
     name = Property()
     username = Property()
     preferences = Property()
+    gender = Property()
 
     # relationships
     follow = RelatedTo("User")

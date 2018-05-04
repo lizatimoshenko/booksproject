@@ -4,6 +4,7 @@ from py2neo import Graph, watch, authenticate
 from os.path import dirname, join as path_join
 # from py2neo.neo4j import GraphDatabaseService, CypherQuery
 import bcrypt
+
 from models import User
 
 
@@ -13,6 +14,7 @@ TEMPLATE_PATH.insert(0, path_join(home, "views"))
 
 authenticate("localhost:7474", "neo4j", "")
 salt = bcrypt.gensalt()
+
 
 
 # Set up a link to the local graph database.
@@ -66,7 +68,7 @@ def get_login():
 
         password = request.forms.get('password')
         if bcrypt.checkpw(password, str(user_password[0]['user.password'])):
-            response.set_cookie("account", username, secret='some-secret-key')
+            response.set_cookie("account", username)
             info = {'username': username}
             return template('profile.tpl', info)
         else:
@@ -79,6 +81,18 @@ def log_out():
     redirect('/')
 
 
+@route("/settings")
+def settings():
+    username = request.cookies.account
+    user_info = graph.run("MATCH (user {username:{N}}) RETURN user", {"N": username}).data()
+    user_data = user_info[0].get('user')
+    info = {'username': user_data['username'],
+            'email': user_data['email'],
+            'name': user_data['name'],
+            'surname': user_data['surname']}
+    return template('settings.tpl', info)
+
+
 # Static CSS Files
 @route('/static/:path#.+#', name='static')
 def static(path):
@@ -87,6 +101,13 @@ def static(path):
 
 def server_static_img(filename):
     return static_file(filename, root='/static/images')
+
+
+def server_static_js(filename):
+    return static_file(filename, root='/static/js')
+
+
+
 
 
 run(host='localhost', port=8080, debug=True)
