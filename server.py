@@ -4,9 +4,8 @@ from py2neo import Graph, watch, authenticate
 from os.path import dirname, join as path_join
 # from py2neo.neo4j import GraphDatabaseService, CypherQuery
 import bcrypt
-
-from models import User
-
+from pandas import DataFrame
+from models import User, Book
 
 home = dirname(__file__)
 static = path_join(home, "static")
@@ -14,8 +13,6 @@ TEMPLATE_PATH.insert(0, path_join(home, "views"))
 
 authenticate("localhost:7474", "neo4j", "")
 salt = bcrypt.gensalt()
-
-
 
 # Set up a link to the local graph database.
 graph = Graph("http://localhost:7474/db/data/")
@@ -51,11 +48,6 @@ def get_register():
     redirect("/")
 
 
-@route("/login")
-def get_login_form():
-    return static_file("login.html", root="views")
-
-
 # TODO  if username exist show it to user
 
 @route("/login", method="POST")
@@ -68,11 +60,24 @@ def get_login():
 
         password = request.forms.get('password')
         if bcrypt.checkpw(password, str(user_password[0]['user.password'])):
-            response.set_cookie("account", username)
-            info = {'username': username}
+            response.set_cookie("account", username, secret='some-secret-key')
+
+            book = graph.run("MATCH (b:Book) RETURN b").data()
+            book_data = book[0].get('b')
+            info = {'username': username,
+                    'image': book_data['image'],
+                    'title': book_data['title']}
+            print()
             return template('profile.tpl', info)
         else:
             return "<p>Login failed.</p>"
+
+
+@route("/login")
+def get_home():
+    username = request.get_cookie("account", secret='some-secret-key')
+    info = {'username': username}
+    return template("profile.tpl", info)
 
 
 @route("/logout")
@@ -83,7 +88,7 @@ def log_out():
 
 @route("/settings")
 def settings():
-    username = request.cookies.account
+    username = request.get_cookie("account", secret='some-secret-key')
     user_info = graph.run("MATCH (user {username:{N}}) RETURN user", {"N": username}).data()
     user_data = user_info[0].get('user')
     info = {'username': user_data['username'],
@@ -92,6 +97,74 @@ def settings():
             'surname': user_data['surname']}
     return template('settings.tpl', info)
 
+
+@route("/following")
+def following():
+    username = request.get_cookie("account", secret='some-secret-key')
+    info = {'username': username}
+    return template('followings.tpl', info)
+
+
+@route("/searchpeople")
+def following():
+    username = request.get_cookie("account", secret='some-secret-key')
+    users = graph.run("MATCH (user:User) WHERE user.username <> {N} RETURN user", {"N": username}).data()
+    usernames = []
+    for user in users:
+        usernames.append(user['user']['username'])
+
+    info = {'username': username,
+            'usernames': usernames}
+
+    return template('searchpeople.tpl', info)
+
+
+@route("/followers")
+def followers():
+    username = request.get_cookie("account", secret='some-secret-key')
+    followers = graph.run("MATCH (u:User)-[:FOLLOWS]->(f:User {username:{F}})"
+                          "RETURN u", {"F": username}).data()
+    print(followers)
+    usernames = []
+    for follower in followers:
+        usernames.append(follower['u']['username'])
+
+    info = {'username': username,
+            'usernames': usernames}
+
+    return template('followerspage.tpl', info)
+
+
+@route("/follow/<user>")
+def following(user):
+    username = request.get_cookie("account", secret='some-secret-key')
+    graph.run("MATCH (u:User {username:{U}}),(f:User {username:{F}})"
+              "MERGE (u)-[:FOLLOWS]->(f)", {"U": username, "F": user})
+    users = graph.run("MATCH (user:User) WHERE user.username <> {N} RETURN user", {"N": username}).data()
+    usernames = []
+    for user in users:
+        usernames.append(user['user']['username'])
+
+    info = {'username': username,
+            'usernames': usernames}
+
+    return template('searchpeople.tpl', info)
+
+
+@route("/read_more/<title>")
+def read_more(title):
+    username = request.get_cookie("account", secret='some-secret-key')
+    book = graph.run("MATCH (book:Book) WHERE book.title={N} RETURN book", {"N": title}).data()
+    book_data = book[0].get('book')
+
+    info = {'title': book_data['title'],
+            'image': book_data['image'],
+            'language': book_data['language'],
+            'published': book_data['published'],
+            'annotation': book_data['annotation'],
+            'username': username}
+
+    return template('read_more.tpl', info)
 
 # Static CSS Files
 @route('/static/:path#.+#', name='static')
@@ -107,9 +180,4 @@ def server_static_js(filename):
     return static_file(filename, root='/static/js')
 
 
-
-
-
 run(host='localhost', port=8080, debug=True)
-
-

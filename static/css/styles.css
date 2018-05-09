@@ -778,3 +778,6 @@ _:-ms-input-placeholder, :root .demo-graph {
           align-items: center;
 }
 
+.center {
+    margin: auto;
+}

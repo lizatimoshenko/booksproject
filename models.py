@@ -22,6 +22,8 @@ class User(GraphObject):
     subscribe = RelatedTo("Author")
     prefer = RelatedTo("Genre")
 
+    follower = RelatedFrom("User", "FOLLOWS")
+
 
 class Book(GraphObject):
     __primarykey__ = 'title'
