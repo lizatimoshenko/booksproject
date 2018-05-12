@@ -4,7 +4,8 @@ from py2neo import Graph, watch, authenticate
 from os.path import dirname, join as path_join
 # from py2neo.neo4j import GraphDatabaseService, CypherQuery
 import bcrypt
-from pandas import DataFrame
+import json
+import cgi, cgitb
 from models import User, Book
 
 home = dirname(__file__)
@@ -24,11 +25,6 @@ def get_index():
     """ Index page.
     """
     return static_file("index.html", root="views")
-
-
-@route("/register")
-def get_form():
-    return static_file("register.html", root="views")
 
 
 @route("/register", method='POST')
@@ -76,7 +72,11 @@ def get_login():
 @route("/login")
 def get_home():
     username = request.get_cookie("account", secret='some-secret-key')
-    info = {'username': username}
+    book = graph.run("MATCH (b:Book) RETURN b").data()
+    book_data = book[0].get('b')
+    info = {'username': username,
+            'image': book_data['image'],
+            'title': book_data['title']}
     return template("profile.tpl", info)
 
 
@@ -163,8 +163,19 @@ def read_more(title):
             'published': book_data['published'],
             'annotation': book_data['annotation'],
             'username': username}
-
+    print(info)
     return template('read_more.tpl', info)
+
+
+@route("/add_wish", method="POST")
+def add_wish():
+    '''
+    data = request.json
+    print(data['title'])
+    username = request.get_cookie("account", secret='some-secret-key')
+    '''
+    return "Done"
+
 
 # Static CSS Files
 @route('/static/:path#.+#', name='static')
