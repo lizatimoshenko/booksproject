@@ -1,11 +1,11 @@
 import bottle
 from bottle import get, post, redirect, request, route, run, static_file, view, template, TEMPLATE_PATH, response, abort
-from py2neo import Graph, watch, authenticate
+from py2neo import Graph, watch, authenticate, remote
 from os.path import dirname, join as path_join
 import os
 import bcrypt
 from models import User
-import json
+from beaker.middleware import SessionMiddleware
 home = dirname(__file__)
 static = path_join(home, "static")
 TEMPLATE_PATH.insert(0, path_join(home, "views"))
@@ -17,6 +17,13 @@ salt = bcrypt.gensalt()
 graph = Graph("http://localhost:7474/db/data/")
 watch("neo4j.bolt")
 
+session_opts = {
+    'session.type': 'file',
+    'session.cookie_expires': 300,
+    'session.data_dir': './data',
+    'session.auto': True
+}
+app = SessionMiddleware(bottle.app(), session_opts)
 
 @route("/")
 def get_index():
@@ -65,13 +72,46 @@ def get_login():
             response.set_cookie("account", username, secret='some-secret-key')
             user = graph.run("MATCH (u:User {username:{U}}) RETURN u", {"U": username}).data()
             user_data = user[0].get('u')
-            book = graph.run("MATCH (b:Book) RETURN b").data()
-            book_data = book[0].get('b')
+
+            # last added
+            last_added_books = graph.run("MATCH (b:Book) RETURN b ORDER BY b.added_at LIMIT 4")
+
+            list_of_last_added_books = []
+
+            while last_added_books.forward():
+                data = last_added_books.current()["b"]
+                list_of_last_added_books.append(dict(data))
+            print(list_of_last_added_books)
             info = {'username': username,
                     'avatar': user_data['image'],
-                    'image': book_data['image'],
-                    'title': book_data['title']}
-            print()
+                    'last_added_books': list_of_last_added_books}
+
+            result = graph.run("MATCH (u:User {username:{F}})-[:FOLLOWS]->(follower:User)"
+                               "-[:READ]->(book:Book)"
+                               "RETURN DISTINCT book", {"F": username})
+
+            user_books = []
+
+            while result.forward():
+                book = result.current()["book"]
+                user_books.append(book)
+
+            result1 = graph.run("MATCH (u:User {username:{F}})<-[:FOLLOWS]-(follower:User)"
+                                "-[:READ]->(book:Book)"
+                                "RETURN DISTINCT book", {"F": username})
+
+            user_books1 = []
+
+            while result1.forward():
+                book = result1.current()["book"]
+                user_books1.append(book)
+
+            info = {'username': username,
+                    'avatar': user_data['image'],
+                    'last_added_books': list_of_last_added_books,
+                    'user_books': user_books,
+                    'user_books1': user_books1}
+
             return template('profile.tpl', info)
         else:
             return "<p>Login failed.</p>"
@@ -80,14 +120,43 @@ def get_login():
 @route("/login")
 def get_home():
     username = request.get_cookie("account", secret='some-secret-key')
-    book = graph.run("MATCH (b:Book) RETURN b").data()
-    book_data = book[0].get('b')
     user = graph.run("MATCH (u:User {username:{U}}) RETURN u", {"U": username}).data()
     user_data = user[0].get('u')
+    # last added
+    last_added_books = graph.run("MATCH (b:Book) RETURN b ORDER BY b.added_at LIMIT 4")
+
+    list_of_last_added_books = []
+
+    while last_added_books.forward():
+        data = last_added_books.current()["b"]
+        list_of_last_added_books.append(dict(data))
+
+    result = graph.run("MATCH (u:User {username:{F}})-[:FOLLOWS]->(follower:User)"
+                       "-[:READ]->(book:Book)"
+                       "RETURN DISTINCT book", {"F": username})
+
+    user_books = []
+
+    while result.forward():
+        book = result.current()["book"]
+        user_books.append(book)
+
+    result1 = graph.run("MATCH (u:User {username:{F}})<-[:FOLLOWS]-(follower:User)"
+                       "-[:READ]->(book:Book)"
+                       "RETURN DISTINCT book", {"F": username})
+
+    user_books1 = []
+
+    while result1.forward():
+        book = result1.current()["book"]
+        user_books1.append(book)
+
     info = {'username': username,
             'avatar': user_data['image'],
-            'image': book_data['image'],
-            'title': book_data['title']}
+            'last_added_books': list_of_last_added_books,
+            'user_books': user_books,
+            'user_books1': user_books1}
+
     return template("profile.tpl", info)
 
 
@@ -131,18 +200,24 @@ def following():
     user_info = graph.run("MATCH (user {username:{N}}) RETURN user", {"N": username}).data()
     user_data = user_info[0].get('user')
 
-    followings = graph.run("MATCH (u:User {username:{F}})-[:FOLLOWS]->(following:User)"
-                           "RETURN following", {"F": username})
+    result = graph.run("MATCH (u:User {username:{F}})-[:FOLLOWS]->(following:User)"
+                       "-[:READ]->(book:Book)"
+                       "RETURN following, collect(book) as books", {"F": username})
 
     users = []
+    user_books = {}
 
-    while followings.forward():
-        data = followings.current()["following"]
-        users.append(dict(data))
+    while result.forward():
+        user = result.current()["following"]
+        users.append(user)
+
+        books = result.current()["books"]
+        user_books[user['username']] = books
 
     info = {'username': username,
             'avatar': user_data['image'],
-            'users': users}
+            'users': users,
+            'user_books': user_books}
 
     return template('followings.tpl', info)
 
@@ -174,15 +249,50 @@ def following():
 @route("/followers")
 def followers():
     username = request.get_cookie("account", secret='some-secret-key')
-    followers = graph.run("MATCH (u:User)-[:FOLLOWS]->(f:User {username:{F}})"
-                          "RETURN u", {"F": username}).data()
+    user_info = graph.run("MATCH (user {username:{N}}) RETURN user", {"N": username}).data()
+    user_data = user_info[0].get('user')
+    result = graph.run("MATCH (user:User)-[:FOLLOWS]->(f:User {username:{F}})"
+                       "RETURN user", {"F": username})
 
-    usernames = []
-    for follower in followers:
-        usernames.append(follower['u']['username'])
+
+    users = []
+
+    while result.forward():
+        data = result.current()["user"]
+        users.append(dict(data))
+
+    print(users)
+
+    followings_res = graph.run("MATCH (u:User {username:{F}})-[:FOLLOWS]->(following:User)"
+                               "RETURN following", {"F": username})
+
+    followings = []
+
+    while followings_res.forward():
+        data = followings_res.current()['following']
+        followings.append(data['username'])
+
+    result = graph.run("MATCH (u:User {username:{F}})<-[:FOLLOWS]-(follower:User)"
+                       "-[:READ]->(book:Book)"
+                       "RETURN follower, collect(book) as books", {"F": username})
+
+    users = []
+    user_books = {}
+
+    while result.forward():
+        user = result.current()["follower"]
+        users.append(user)
+
+        books = result.current()["books"]
+        user_books[user['username']] = books
+
 
     info = {'username': username,
-            'usernames': usernames}
+            'users': users,
+            'avatar': user_data['image'],
+            'followings': followings,
+            'user_books': user_books
+            }
 
     return template('followerspage.tpl', info)
 
@@ -236,37 +346,63 @@ def unfollow_user():
     return "Done"
 
 
-@route("/read_more/<title>")
-def read_more(title):
+@route("/read_more")
+def read_more():
     username = request.get_cookie("account", secret='some-secret-key')
-    book = graph.run("MATCH (book:Book) WHERE book.title={N} RETURN book", {"N": title}).data()
-    book_data = book[0].get('book')
+    book_title = request.query.title
+
+    print(book_title)
+    book = graph.run("MATCH (book:Book) WHERE book.title={N}"
+                     "RETURN book", {"N": book_title}).data()
     authors = graph.run("MATCH (author:Author)-[:WROTE]->(book:Book {title:{N}})"
-                        "RETURN author", {"N": title}).data()
-    author_name = authors[0].get('author')
-    info = {'title': book_data['title'],
-            'image': book_data['image'],
-            'language': book_data['language'],
-            'published': book_data['published'],
-            'annotation': book_data['annotation'],
-            'username': username,
-            'author': author_name['name']}
-    print(info)
-    return template('read_more.tpl', info)
+                        "RETURN author", {"N": book_title}).data()
+    genres = graph.run("MATCH (genre:Genre)-[:GENRE_OF]->(book:Book {title:{N}})"
+                       "RETURN genre", {"N": book_title})
+    genres_list = []
+    while genres.forward():
+        data = genres.current()['genre']
+        genres_list.append(dict(data))
+
+    user_info = graph.run("MATCH (user {username:{N}}) RETURN user", {"N": username}).data()
+    user_data = user_info[0].get('user')
+
+    book_info = book[0].get('book')
+    author = authors[0].get('author')
+    info = {'username': username,
+            'avatar': user_data['image'],
+            'book_info': book_info,
+            'author': author['name'],
+            'genres': genres_list
+            }
+
+    return template('aboutbook.tpl', info)
 
 
-@route("/about_author/<name>")
-def about_author(name):
+@route("/about_author")
+def about_author():
     username = request.get_cookie("account", secret='some-secret-key')
-
+    name = request.query.author
     authors = graph.run("MATCH (author:Author {name:{N}})"
                         "RETURN author", {"N": name}).data()
+    user_info = graph.run("MATCH (user {username:{N}}) RETURN user", {"N": username}).data()
+    user_data = user_info[0].get('user')
+
+    books = graph.run("MATCH (author:Author {name:{N}})-[:WROTE]->(book:Book)"
+                      "RETURN book", {"N": name})
+
+    books_list = []
+    while books.forward():
+        data = books.current()['book']
+        books_list.append(dict(data))
+
     author = authors[0].get('author')
     info = {'name': author['name'],
             'image': author['image'],
             'born': author['born'],
-            'username': username}
-    print(info)
+            'username': username,
+            'avatar': user_data['image'],
+            'books': books_list}
+
     return template('author_page.tpl', info)
 
 
@@ -337,6 +473,8 @@ def read_book():
     data = request.json
     title = data['title']
     username = request.get_cookie("account", secret='some-secret-key')
+
+
     graph.run("MATCH (user:User {username:{U}}),"
               "(book:Book {title:{B}})"
               "MERGE (user)-[:READ]->(book)",
@@ -348,16 +486,22 @@ def read_book():
 @route("/wishlist")
 def add_wish():
     username = request.get_cookie("account", secret='some-secret-key')
-    books = graph.run("MATCH (u:User {username:{U}})-[:WISHES]->(book)"
-                      "RETURN book", {"U": username}).data()
-    book_data = books[0].get('book')
+    user_info = graph.run("MATCH (user {username:{N}}) RETURN user", {"N": username}).data()
+    user_data = user_info[0].get('user')
 
-    info = {'title': book_data['title'],
-            'image': book_data['image'],
-            'language': book_data['language'],
-            'published': book_data['published'],
-            'annotation': book_data['annotation'],
-            'username': username}
+    result = graph.run("MATCH (u:User {username:{U}})-[:WISHES]->(book)"
+                      "RETURN book", {"U": username})
+
+    books = []
+
+    while result.forward():
+        data = result.current()['book']
+        books.append(dict(data))
+
+    info = {'username':username,
+            'avatar': user_data['image'],
+            'books':books
+            }
 
     return template('wishlist.tpl', info)
 
@@ -365,16 +509,22 @@ def add_wish():
 @route("/books")
 def books_list():
     username = request.get_cookie("account", secret='some-secret-key')
-    books = graph.run("MATCH (u:User {username:{U}})-[:READ]->(book)"
-                      "RETURN book", {"U": username}).data()
-    book_data = books[0].get('book')
+    user_info = graph.run("MATCH (user {username:{N}}) RETURN user", {"N": username}).data()
+    user_data = user_info[0].get('user')
 
-    info = {'title': book_data['title'],
-            'image': book_data['image'],
-            'language': book_data['language'],
-            'published': book_data['published'],
-            'annotation': book_data['annotation'],
-            'username': username}
+    result = graph.run("MATCH (u:User {username:{U}})-[:READ]->(book)"
+                       "RETURN book", {"U": username})
+
+    books = []
+
+    while result.forward():
+        data = result.current()['book']
+        books.append(dict(data))
+
+    info = {'username': username,
+            'avatar': user_data['image'],
+            'books': books
+            }
 
     return template('books.tpl', info)
 
@@ -486,15 +636,25 @@ def search():
                        "WHERE user.name<>{U}"
                        "RETURN user", {"U": username})
 
+    followings_res = graph.run("MATCH (u:User {username:{F}})-[:FOLLOWS]->(following:User)"
+                               "RETURN following", {"F": username})
+
     users = []
 
     while result.forward():
         data = result.current()['user']
         users.append(dict(data))
 
+    followings = []
+
+    while followings_res.forward():
+        data = followings_res.current()['following']
+        followings.append(data['username'])
+
     info = {'username': username,
             'avatar': user_data['image'],
-            'users': users}
+            'users': users,
+            'followings': followings}
 
     return template('searchresult.tpl', info)
 
@@ -507,24 +667,97 @@ def search():
     user_info = graph.run("MATCH (user {username:{N}}) RETURN user", {"N": username}).data()
     user_data = user_info[0].get('user')
 
-    result = graph.run("MATCH (user:User)"
+    result = graph.run("MATCH (user:User)-[:READ]->(book:Book)"
                        "WHERE (user.username CONTAINS {Q})"
                        "AND (user.username<>{U})"
-                       "RETURN user", {"Q": res, "U": username})
+                       "RETURN user, collect(book) as books", {"U": username, "Q":res})
 
     users = []
+    user_books = {}
 
     while result.forward():
-        data = result.current()['user']
-        users.append(dict(data))
+        user = result.current()["user"]
+        users.append(user)
 
+        books = result.current()["books"]
+        user_books[user['username']] = books
+
+    followings_res = graph.run("MATCH (u:User {username:{F}})-[:FOLLOWS]->(following:User)"
+                               "RETURN following", {"F": username})
+
+    followings = []
+
+    while followings_res.forward():
+        data = followings_res.current()['following']
+        followings.append(data['username'])
+    print(followings)
     info = {'username': username,
             'avatar': user_data['image'],
-            'users': users}
+            'users': users,
+            'followings': followings,
+            'user_books': user_books}
 
     return template('searchresult.tpl', info)
 
 
+@route("/authors")
+def show_authors():
+    username = request.get_cookie("account", secret='some-secret-key')
+    user_info = graph.run("MATCH (user {username:{N}}) RETURN user", {"N": username}).data()
+    user_data = user_info[0].get('user')
+
+    result = graph.run("MATCH (u:User {username:{F}})-[:LIKES]->(author:Author)"
+                       "-[:WROTE]->(book:Book)"
+                       "RETURN author,collect(book) as books", {"F": username})
 
 
-run(host='localhost', port=8080, debug=True)
+    authors = []
+
+    user_books = {}
+
+    while result.forward():
+        author = result.current()["author"]
+        authors.append(author)
+
+        books = result.current()["books"]
+        user_books[author['name']] = books
+
+    info = {'username': username,
+            'avatar': user_data['image'],
+            'authors': authors,
+            'user_books': user_books}
+
+    return template('authors.tpl', info)
+
+
+@route('/search_authors', method="POST")
+def search_authors():
+    res = request.forms.get('search')
+    print(res)
+    username = request.get_cookie("account", secret='some-secret-key')
+    user_info = graph.run("MATCH (user {username:{N}}) RETURN user", {"N": username}).data()
+    user_data = user_info[0].get('user')
+
+    result = graph.run("MATCH (author:Author)"
+                       "WHERE (author.name CONTAINS {Q})"
+                       "RETURN author", {"Q": res, "U": username})
+
+    print(result)
+
+
+    authors = []
+
+    while result.forward():
+        data = result.current()['author']
+        authors.append(dict(data))
+
+    likes = []
+
+    info = {'username': username,
+            'avatar': user_data['image'],
+            'authors': authors}
+
+    return template('authorsearch.tpl', info)
+
+
+bottle.run(host='localhost', port=8080, debug=True)

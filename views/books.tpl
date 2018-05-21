@@ -7,21 +7,31 @@
 <body>
 
 <div class="demo-layout mdl-layout mdl-js-layout mdl-layout--fixed-drawer mdl-layout--fixed-header">
-      % include('header.tpl', title='Рекомендации')
+      % include('header.tpl', title='Список желаний')
        <main class="mdl-layout__content mdl-color--grey-100">
-         <div class="mdl-grid">
-            <div class="demo-card-square mdl-card mdl-shadow--2dp">
-  <div class="mdl-card__title mdl-card--expand">
-    <img src={{image}}>
-    <h2 class="mdl-card__title-text">{{title}}</h2>
-  </div>
-  <div class="mdl-card__actions mdl-card--border">
-    <a href="/read_more/{{title}}" class="mdl-button mdl-button--colored mdl-js-button mdl-js-ripple-effect">
-      Читать
-    </a>
-  </div>
-</div>
-         </div>
+           <div class="mdl-grid">
+        % for book in books:
+        <div class="mdl-card mdl-shadow--2dp mdl-cell mdl-cell--12-col">
+          <form action="" >
+            <div class="mdl-grid">
+              <img class="mdl-cell mdl-cell--3-col" src="{{book['image']}}" width="150" height="200">
+
+              <div class="mdl-cell mdl-cell--9-col">
+                <a href="/read_more?title={{book['title']}}"><p id="username"  class="parag">{{book['title']}}</p></a>
+                    <p> {{book['annotation']}}</p>
+              </div>
+              <div class="mdl-cell mdl-cell--10-offset ">
+                <button id="subscribe" type="submit" class="unfollowBtn mdl-button mdl-js-button mdl-button--raised mdl-button--colored">
+                Читать далее
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+        % end
+      </div>
+
+
        </main>
 </div>
 </body>

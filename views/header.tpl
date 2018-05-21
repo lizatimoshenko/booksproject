@@ -8,7 +8,7 @@
   <header class="demo-drawer-header">
     <img src={{avatar}} class="demo-avatar">
     <div class="demo-avatar-dropdown">
-      <span>Hello, {{username}}</span>
+      <span>Здраствуйте, {{username}}</span>
       <div class="mdl-layout-spacer"></div>
       <a href="/logout">
       <button  class="mdl-button mdl-js-button mdl-js-ripple-effect mdl-button--icon">
