@@ -781,3 +781,16 @@ _:-ms-input-placeholder, :root .demo-graph {
 .center {
     margin: auto;
 }
+
+h4{
+    color: #39484c;
+}
+
+.parag{
+
+    font-size: 30px;
+}
+p{
+    color: #39484c;
+    margin: auto;
+}

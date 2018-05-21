@@ -104,12 +104,18 @@
                 </div>
 
 
-                <p>
+                <div>
                     <button type="submit" class="mdl-button">Sign up</button>
-                </p>
+                    <button type="button" id="close1" class="mdl-button">Cancel</button>
+                </div>
             </form>
         </div>
     </div>
+
+    <div id="demo-toast-example" class="mdl-js-snackbar mdl-snackbar">
+  <div class="mdl-snackbar__text"></div>
+  <button class="mdl-snackbar__action" type="button"></button>
+</div>
 </dialog>
 
 <dialog class="dialog" id="dialog-signin">
@@ -131,9 +137,11 @@
                 </div>
 
 
-                <p>
+                <div>
+
                     <button type="submit" class="mdl-button">Sign in</button>
-                </p>
+                    <button type="button" id="close2" class="mdl-button">Cancel</button>
+                </div>
             </form>
         </div>
     </div>
@@ -166,6 +174,14 @@
         hide: 'fade';
 
     });
+
+    dialog1.querySelector('#close1').addEventListener('click', function() {
+        dialog1.close();
+    });
+     dialog2.querySelector('#close2').addEventListener('click', function() {
+        dialog2.close();
+    });
+
 
 </script>
 

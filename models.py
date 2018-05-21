@@ -11,9 +11,9 @@ class User(GraphObject):
 
     # additional fields for profile
     name = Property()
-    username = Property()
+    surname = Property()
     preferences = Property()
-    gender = Property()
+    image = Property()
 
     # relationships
     follow = RelatedTo("User")
@@ -21,7 +21,7 @@ class User(GraphObject):
     wrote = RelatedTo("Review")
     subscribe = RelatedTo("Author")
     prefer = RelatedTo("Genre")
-
+    wishes = RelatedTo("Book")
     follower = RelatedFrom("User", "FOLLOWS")
 
 
@@ -40,13 +40,14 @@ class Book(GraphObject):
     genre = RelatedFrom("Genre", "IS_GENRE")
     reader = RelatedFrom("User", "READ")
     review = RelatedFrom("Review", "ABOUT")
+    wish = RelatedFrom("User", "WISHES")
 
 
 class Author(GraphObject):
     __primarykey__ = 'name' #???
 
     name = Property()
-    biography = Property()
+    born = Property()
 
     wrote = RelatedTo(Book)
     liked = RelatedFrom("User", "SUBSCRIBE")

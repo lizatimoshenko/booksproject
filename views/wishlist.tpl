@@ -7,7 +7,7 @@
 <body>
 
 <div class="demo-layout mdl-layout mdl-js-layout mdl-layout--fixed-drawer mdl-layout--fixed-header">
-      % include('header.tpl', title='Рекомендации')
+      % include('header.tpl', title='Список желаний')
        <main class="mdl-layout__content mdl-color--grey-100">
          <div class="mdl-grid">
             <div class="demo-card-square mdl-card mdl-shadow--2dp">

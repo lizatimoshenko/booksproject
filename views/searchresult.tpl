@@ -41,8 +41,8 @@
 
 
                         <div class="mdl-cell mdl-cell--10-offset ">
-                            <button onclick="follow()" type="submit"
-                                    class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored">
+                            <button type="submit" id="{{user['username']}}"
+                                    class="followBtn mdl-button mdl-js-button mdl-button--raised mdl-button--colored">
                                 Подписаться
                             </button>
                         </div>
@@ -54,32 +54,36 @@
         </div>
     </main>
 </div>
+<script >
+    $(document).ready(function() {
+     $('.followBtn').click(function () {
 
-<script>
-    $(document).ready(function () {
-        $('#search').keyup(function () {
-            var query = $(this).val();
+         var id = $(this).attr('id');
+          console.log(id);
+         var fd =new FormData;
+		fd.append('user', id);
 
-            $.ajax({
-                type: "POST",
-                url: "/search",
-                data: {'search': query},
-                success: function (data) {
-                    for (var i = 0; i < data.length; i++) {
-                        $('#image').attr('src', data[i]['user']['image']);
-                        console.log(data[i]['user']['email']);
+  $.ajax({
+  type: 'POST',
+  url: '/follow',
+  data: fd,
+  contentType: false,
+  processData: false,
+  success: function(data) {
 
-}
+  console.log(data)
+  },
+  error: function(ajaxOptions, thrownError) {
 
-                }
+  }
+  });
 
-            });
-        });
-    });
+
+
+
+     });
+ });
 
 </script>
-<script src="./static/js/follow.js"></script>
-
 </body>
-
 </html>
