@@ -651,10 +651,23 @@ def search():
         data = followings_res.current()['following']
         followings.append(data['username'])
 
+    result = graph.run("MATCH (user:User)-[:READ]->(book:Book)"
+                       "WHERE (user.username<>{U})"
+                       "RETURN user, collect(book) as books", {"U": username})
+
+
+    user_books = {}
+
+    while result.forward():
+        user = result.current()["user"]
+        books = result.current()["books"]
+        user_books[user['username']] = books
+
     info = {'username': username,
             'avatar': user_data['image'],
             'users': users,
-            'followings': followings}
+            'followings': followings,
+            'user_books': user_books}
 
     return template('searchresult.tpl', info)
 
